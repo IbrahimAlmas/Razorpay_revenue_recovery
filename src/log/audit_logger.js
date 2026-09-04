@@ -1,14 +1,19 @@
 // src/log/audit_logger.js
 
 const path = require('path');
+const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const DB_PATH = path.join(__dirname, '..', '..', 'db', 'audit_log.db');
+const DB_DIR = path.join(__dirname, '..', '..', 'db');
+const DB_PATH = path.join(DB_DIR, 'audit_log.db');
 
 let db = null;
 
 function getDb() {
   if (db) return db;
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+  }
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
   initSchema(db);
@@ -86,6 +91,34 @@ function getAuditTrail({ limit = 200, customerId = null } = {}) {
   return database.prepare(`SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?`).all(limit);
 }
 
+function getSummaryStats() {
+  const database = getDb();
+
+  const totals = database
+    .prepare(`SELECT COUNT(*) AS total, AVG(confidence) AS avg_confidence FROM audit_log`)
+    .get();
+
+  const byDiagnosis = database
+    .prepare(`SELECT diagnosis, COUNT(*) AS count FROM audit_log GROUP BY diagnosis ORDER BY count DESC`)
+    .all();
+
+  const byAction = database
+    .prepare(`SELECT action_taken, COUNT(*) AS count FROM audit_log GROUP BY action_taken ORDER BY count DESC`)
+    .all();
+
+  const byStatus = database
+    .prepare(`SELECT action_status, COUNT(*) AS count FROM audit_log GROUP BY action_status ORDER BY count DESC`)
+    .all();
+
+  return {
+    total: totals.total ?? 0,
+    avgConfidence: totals.avg_confidence ?? 0,
+    byDiagnosis,
+    byAction,
+    byStatus
+  };
+}
+
 function closeDb() {
   if (db) {
     db.close();
@@ -93,4 +126,11 @@ function closeDb() {
   }
 }
 
-module.exports = { getDb, logRecord, getRecentActionsForSession, getAuditTrail, closeDb };
+module.exports = {
+  getDb,
+  logRecord,
+  getRecentActionsForSession,
+  getAuditTrail,
+  getSummaryStats,
+  closeDb
+};

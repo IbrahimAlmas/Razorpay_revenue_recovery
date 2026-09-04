@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Revenue Recovery Agent — Dashboard</title>
+<link rel="stylesheet" href="styles/main.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="components/SummaryStats.jsx"></script>
+<script type="text/babel" src="components/AuditTable.jsx"></script>
+<script type="text/babel" src="components/FailureCaseDemo.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+function App() {
+  const [summary, setSummary] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function load() {
+    try {
+      const [summaryRes, trailRes] = await Promise.all([
+        fetch('/api/summary'),
+        fetch('/api/audit-trail?limit=200')
+      ]);
+      if (!summaryRes.ok || !trailRes.ok) throw new Error('API request failed');
+      setSummary(await summaryRes.json());
+      setRows(await trailRes.json());
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="app-shell">
+      <div className="app-header">
+        <h1>Revenue Recovery Agent</h1>
+        <p>Detect → Diagnose → Guardrails → Act → Log</p>
+      </div>
+
+      {error && <div className="panel"><span className="error-text">Error loading data: {error}</span></div>}
+
+      <SummaryStats summary={summary} />
+      <FailureCaseDemo rows={rows} />
+      <AuditTable rows={rows} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
